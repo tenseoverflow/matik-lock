@@ -64,11 +64,43 @@ void loop() {
 
 void generateCode() {
   generatedCode = "";
-  for (int i = 0; i < 6; i++) {
-    generatedCode += String(random(1, 10));
+  //for (int i = 0; i < 6; i++) {
+  //  generatedCode += String(random(1, 10));
+  //}
+  bool codeGeneration = True;
+  while (codeGeneration) {
+    char key = keypad.getKey();
+
+    if (key) {
+    if (key == '#') {
+      lcd.clear();
+      if (len(enteredCode) == 6) {
+        lcd.print("Code has been accepted.");
+        codeGeneration = False;
+        generatedCode = enteredCode;
+      } else {
+        lcd.print("Try again");
+      }
+    } else if (key == '*') {
+      enteredCode = "";
+      Serial.println("\nInput cleared");
+      lcd.clear();
+    } else {
+      if (enteredCode.length() < 6) {  // code lentgh limited to 10
+        enteredCode += key;
+        Serial.print(key);
+        lcd.print(key);
+      }
+    }
   }
+    
+    
+  }
+  
+
   Serial.print("\nGenerated Code: ");
   Serial.println(generatedCode);
+  
 }
 
 void checkCode() {
@@ -87,7 +119,6 @@ void checkCode() {
       tone(PIEZO, 1000, 500);    
       unlockMotor();  
       Serial.println("The door is now closed.");
-      generateCode();
       lcd.clear();
     }
   } else {
