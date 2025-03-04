@@ -1,3 +1,4 @@
+
 #include <Wire.h>
 #include <Keypad.h>   
 #include <stdlib.h>   
@@ -7,7 +8,6 @@ LiquidCrystal_I2C lcd(0x27, 16, 2); // Set the LCD address to 0x27 for a 16x2 di
 
 int PIEZO = 6;
 int motorPin1 = 7;
-int motorPin2 = 2;    
 
 // Keypad
 const byte ROWS = 4;  
@@ -18,7 +18,7 @@ char keys[ROWS][COLS] = {
   {'7', '8', '9', 'C'},
   {'*', '0', '#', 'D'}
 };
-byte rowPins[ROWS] = {13, 12, 11, 10};  
+byte rowPins[ROWS] = {13, 12, 11, 10};
 byte colPins[COLS] = {9, 8, A0, A1};    
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
@@ -31,7 +31,6 @@ void setup() {
   Serial.begin(9600);
   pinMode(PIEZO, OUTPUT);
   pinMode(motorPin1, OUTPUT);
-  pinMode(motorPin2, OUTPUT);
   
   lcd.init();
   lcd.backlight();
@@ -67,16 +66,16 @@ void generateCode() {
   //for (int i = 0; i < 6; i++) {
   //  generatedCode += String(random(1, 10));
   //}
-  bool codeGeneration = True;
+  bool codeGeneration = true;
   while (codeGeneration) {
     char key = keypad.getKey();
 
     if (key) {
     if (key == '#') {
       lcd.clear();
-      if (len(enteredCode) == 6) {
+      if (enteredCode.length() == 6) {
         lcd.print("Code has been accepted.");
-        codeGeneration = False;
+        codeGeneration = false;
         generatedCode = enteredCode;
       } else {
         lcd.print("Try again");
@@ -92,12 +91,9 @@ void generateCode() {
         lcd.print(key);
       }
     }
-  }
-    
-    
+  }  
   }
   
-
   Serial.print("\nGenerated Code: ");
   Serial.println(generatedCode);
   
@@ -135,18 +131,9 @@ void unlockMotor() {
   if (!isUnlocked) {
     // Open the lock (run motor forward)
     digitalWrite(motorPin1, HIGH);
-    digitalWrite(motorPin2, LOW);
-    delay(2000);  // (Aeg, mis votab mootoril, et uks avada)
-    digitalWrite(motorPin1, LOW);
-    digitalWrite(motorPin2, LOW);
     isUnlocked = true;
   } else {
-    // Close the lock (run motor backward)
     digitalWrite(motorPin1, LOW);
-    digitalWrite(motorPin2, HIGH);
-    delay(2000);  // (Aeg, mis votab mootoril, et uks lukustada)
-    digitalWrite(motorPin1, LOW);
-    digitalWrite(motorPin2, LOW);
     isUnlocked = false;
   }
 
