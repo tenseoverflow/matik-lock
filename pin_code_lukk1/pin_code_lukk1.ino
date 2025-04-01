@@ -1,18 +1,15 @@
-
 #include <Wire.h>
 #include <Keypad.h>   
 #include <stdlib.h>   
 #include <LiquidCrystal_I2C.h>
-#include <EEPROM.h>
+#include <EEPROM.h>  // Include EEPROM library
 
-LiquidCrystal_I2C lcd(0x27, 16, 2); // Set the LCD address to 0x27 for a 16x2 display
+LiquidCrystal_I2C lcd(0x27, 16, 2); // LCD address 0x27 for a 16x2 display
 
 int PIEZO = 6;
 int motorPin1 = 7;
 
-bool LCDOccupied = false;
-
-// Keypad
+// Keypad setup
 const byte ROWS = 4;  
 const byte COLS = 4;  
 char keys[ROWS][COLS] = {
@@ -26,9 +23,11 @@ byte colPins[COLS] = {9, 8, A0, A1};
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-String generatedCode = "";
-String enteredCode = "";
-bool isUnlocked = false;  // Lock State
+String userSetCode = "";  // User-defined code
+String enteredCode = "";   // Stores user input
+bool codeSet = false;      // Flag to track if the user has set a code
+bool isUnlocked = false;   // Lock state
+const String specialCode = "696969"; // Special code to generate new code
 
 void setup() {
   Serial.begin(9600);
@@ -38,128 +37,129 @@ void setup() {
   lcd.init();
   lcd.backlight();
   lcd.clear();
-  
-  randomSeed(analogRead(0));
 
-  loadStoredCode();  // Load stored code from EEPROM
-
-    if (generatedCode.length() != 6) {
-        Serial.println("No valid code found, generating new one...");
-        generateCode();
-    }
-
+  // Retrieve stored code from EEPROM (Address 0-5 for 6 characters)
+  userSetCode = readCodeFromEEPROM();
+  if (userSetCode != "") {
+    lcd.print("Code Loaded");
+    delay(2000);
+    lcd.clear();
+    lcd.print("Enter Code:");
+    codeSet = true; // Code already set
+  } else {
+    lcd.print("Set 6-digit code:");
+  }
 }
 
 void loop() {
   char key = keypad.getKey();
 
   if (key) {
-
-    if (LCDOccupied) {
-      lcd.clear();
-      LCDOccupied = false;
+    if (!codeSet) { 
+      setNewCode(key);  // Handle code setup if not set
+    } else {
+      enterAndCheckCode(key);  // Once code is set, enter check mode
     }
+  }
+}
 
-    if (key == '#') {
+// **Function to let the user set their own 6-digit code**
+void setNewCode(char key) {
+  if (key == '#') {  
+    if (userSetCode.length() == 6) {  // Accept only if exactly 6 digits
+      codeSet = true;  
+      storeCodeToEEPROM(userSetCode);  // Store the code in EEPROM
+      lcd.clear();
+      lcd.print("Code Set!");
+      Serial.print("\nUser set code: ");
+      Serial.println(userSetCode);
+      delay(2000);
+      lcd.clear();
+      lcd.print("Enter Code:");
+    } else {
+      lcd.clear();
+      lcd.print("Must be 6 digits!");
+      delay(2000);
+      lcd.clear();
+      lcd.print("Set 6-digit code:");
+      userSetCode = "";  // Reset input
+    }
+  } 
+  else if (key == '*') {  
+    userSetCode = "";  // Clear input
+    lcd.clear();
+    lcd.print("Set 6-digit code:");
+  } 
+  else if (isDigit(key)) {  
+    userSetCode += key;  // Allow any length input
+    Serial.print(key);
+    lcd.setCursor(0, 1);
+    lcd.print(userSetCode);
+  }
+}
+
+// **Function to enter and check the code after setup**
+void enterAndCheckCode(char key) {
+  if (key == '#') {  
+    if (enteredCode.length() != 6) {  // Only accept exactly 6-digit input
+      lcd.clear();
+      lcd.print("Must be 6 digits!");
+      delay(2000);
+      lcd.clear();
+      lcd.print("Enter Code:");
+      enteredCode = "";  
+    } else {
       lcd.clear();
       checkCode();
-    } else if (key == '*') {
-      enteredCode = "";
-      Serial.println("\nInput cleared");
-      lcd.clear();
-    } else {
-      if (enteredCode.length() < 10) {  // code length limited to 10
-        enteredCode += key;
-        Serial.print(key);
-        lcd.print(key);
-      }
     }
+  } 
+  else if (key == '*') {  
+    enteredCode = "";
+    lcd.clear();
+    lcd.print("Enter Code:");
+  } 
+  else if (isDigit(key)) {  
+    enteredCode += key;
+    Serial.print(key);
+    lcd.setCursor(0, 1);
+    lcd.print(enteredCode);
   }
 }
 
-void generateCode() {
-  generatedCode = "";
-  enteredCode = "";
-
-  bool codeGeneration = true;
-  while (codeGeneration) {
-    char key = keypad.getKey();
-
-    if (key) {
-      if (LCDOccupied) {
-        lcd.clear();
-        LCDOccupied = false;
-      }
-
-      if (key == '#') {
-        lcd.clear();
-        if (enteredCode.length() == 6) {
-          lcd.print("Code has been accepted.");
-          codeGeneration = false;
-          generatedCode = enteredCode;
-          LCDOccupied = true;
-        } else {
-          lcd.print("Try again");
-          LCDOccupied = true;
-        }
-      } else if (key == '*') {
-        enteredCode = "";
-        Serial.println("\nInput cleared");
-        lcd.clear();
-      } else {
-        if (enteredCode.length() < 6) {  // code lentgh limited to 10
-          enteredCode += key;
-          Serial.print(key);
-          lcd.print(key);
-        }
-      }
-    }  
-  }
-  
-  // Convert generatedCode to char array for EEPROM saving
-  char codeArray[7]; // 6 digits + null terminator
-  generatedCode.toCharArray(codeArray, 7);
-  saveToEEPROM(0, codeArray);
-
-  Serial.print("\nGenerated Code: ");
-  Serial.println(generatedCode);
-
-  LCDOccupied = true;
-}
-
+// **Function to check if input matches the stored code**
 void checkCode() {
-  if (enteredCode == generatedCode) {
+  if (enteredCode == userSetCode) {
     if (!isUnlocked) {
-      // õige kood
-      lcd.print("Uks on lahti.");
-      tone(PIEZO, 1000, 500); 
-      unlockMotor();   
-      Serial.println("The door is now open.");
-
-      LCDOccupied = true;
+      Serial.println("\nDoor Unlocked.");
+      lcd.print("Door Open");
+      tone(PIEZO, 1000, 500);
+      unlockMotor();
     } else {
-      // paneb lukku uuesti
-      lcd.print("Uks lukustab.");
-      tone(PIEZO, 1000, 500);    
-      unlockMotor();  
-      Serial.println("The door is now closed.");
-     
-      LCDOccupied = true;
+      Serial.println("\nDoor Locked.");
+      lcd.print("Door Locked");
+      tone(PIEZO, 1000, 500);
+      unlockMotor();
+      lcd.clear();
     }
+  } else if (enteredCode == specialCode) {
+    // Special code entered, allow the user to set a new code
+    Serial.println("\nSpecial Code Detected! Generate a New Code.");
+    lcd.clear();
+    lcd.print("Set New 6-Digit Code:");
+    userSetCode = "";  // Reset the entered code for new setup
+    codeSet = false;    // Reset the flag to re-enable setting a new code
   } else {
-    // vale kood
-    lcd.print("Vale kood.");
-    tone(PIEZO, 500, 500);  
     Serial.println("\nIncorrect Code!");
-
-    LCDOccupied = true;
+    tone(PIEZO, 500, 500);
+    lcd.print("Wrong Code");
+    delay(1000);
   }
   enteredCode = "";
 }
 
+// **Motor control for lock/unlock**
 void unlockMotor() {
   if (!isUnlocked) {
-    // Open the lock (run motor forward)
     digitalWrite(motorPin1, HIGH);
     isUnlocked = true;
   } else {
@@ -168,25 +168,24 @@ void unlockMotor() {
   }
 }
 
-void saveToEEPROM(int address, const char* str) {
-    for (int i = 0; i < 6; i++) {
-        EEPROM.write(address + i, str[i]);  // Save each character
-    }
-    EEPROM.write(address + 6, '\0');  // Null terminator for safety
+// **Helper function to check if a key is a digit (0-9)**
+bool isDigit(char key) {
+  return key >= '0' && key <= '9';
 }
 
-void readFromEEPROM(int address, char* buffer, int length) {
-    for (int i = 0; i < length; i++) {
-        buffer[i] = EEPROM.read(address + i);
-    }
-    buffer[length] = '\0';  // Ensure null termination
+// **Function to store the code in EEPROM**
+void storeCodeToEEPROM(String code) {
+  for (int i = 0; i < 6; i++) {
+    EEPROM.write(i, code[i]);  // Store each character byte by byte
+  }
 }
 
-void loadStoredCode() {
-    char storedCode[7];  // 6 digits + null terminator
-    readFromEEPROM(0, storedCode, 6);
-    generatedCode = String(storedCode);
-
-    Serial.print("Stored Code: ");
-    Serial.println(generatedCode);
+// **Function to read the stored code from EEPROM**
+String readCodeFromEEPROM() {
+  String storedCode = "";
+  for (int i = 0; i < 6; i++) {  // Assuming we're storing a 6-digit code
+    char character = EEPROM.read(i);
+    storedCode += character;
+  }
+  return storedCode;
 }
