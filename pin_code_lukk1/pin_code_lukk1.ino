@@ -10,8 +10,8 @@ int PIEZO = 6;
 int motorPin1 = 7;
 
 // Keypad setup
-const byte ROWS = 4;  
-const byte COLS = 4;  
+const byte ROWS = 4;
+const byte COLS = 4;
 char keys[ROWS][COLS] = {
   {'1', '2', '3', 'A'},
   {'4', '5', '6', 'B'},
